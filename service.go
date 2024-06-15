@@ -45,10 +45,10 @@ func (m *Service) StartWait() {
 	var wg sync.WaitGroup
 	wg.Add(len(m.tasks))
 	for _, t := range m.tasks {
-		go func() {
+		go func(t *Task) {
 			t.start()
 			wg.Done()
-		}()
+		}(t)
 	}
 	wg.Wait()
 }
