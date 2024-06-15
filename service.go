@@ -22,9 +22,7 @@ type Service struct {
 
 // create a new Service
 func NewService() *Service {
-	return &Service{
-		C: make(chan struct{}),
-	}
+	return &Service{}
 }
 
 // stop activated service
@@ -41,6 +39,7 @@ func (m *Service) Stop() {
 // Start the Task without blocking-io
 func (m *Service) StartWait() {
 	m.Active = true
+	m.C = make(chan struct{})
 
 	var wg sync.WaitGroup
 	wg.Add(len(m.tasks))
