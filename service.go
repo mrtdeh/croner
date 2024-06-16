@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/adhocore/gronx"
 )
 
 /*
@@ -73,13 +75,18 @@ func (m *Service) NewTask(d Duration, handlers ...Handlers) (*Task, error) {
 	}
 
 	if d.crontab != nil {
-		i, err := parseCrontab(*d.crontab)
-		if err != nil {
-			return nil, fmt.Errorf("parse crontab failed : %v", err)
+
+		c.calculateDuration = func() time.Duration {
+			now := time.Now()
+			ttt, _ := gronx.NextTick(*d.crontab, true)
+			dur := ttt.Sub(now)
+			fmt.Println("dur : ", dur)
+			return dur
 		}
-		c.duration = time.Duration(i) * time.Minute
 	} else if d.duration != nil {
-		c.duration = *d.duration
+		c.calculateDuration = func() time.Duration {
+			return *d.duration
+		}
 	}
 	m.tasks = append(m.tasks, c)
 	return c, nil

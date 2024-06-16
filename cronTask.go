@@ -6,12 +6,12 @@ import (
 )
 
 type Task struct {
-	duration    time.Duration
-	onStart     func()
-	runner      func(context.Context)
-	onTerminate func()
-	cancel      context.CancelFunc
-	active      bool
+	calculateDuration func() time.Duration
+	onStart           func()
+	runner            func(context.Context)
+	onTerminate       func()
+	cancel            context.CancelFunc
+	active            bool
 }
 
 // Stop the running Task
@@ -43,11 +43,11 @@ func (t *Task) start() {
 		defer t.onTerminate()
 	}
 
-	timer := time.NewTimer(t.duration)
+	timer := time.NewTimer(t.calculateDuration())
 	defer timer.Stop()
 
 	for {
-		timer.Reset(t.duration)
+		timer.Reset(t.calculateDuration())
 		select {
 		case <-ctx.Done():
 			return
