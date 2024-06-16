@@ -2,7 +2,6 @@ package croner
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 */
 
 type Service struct {
+	mutex  sync.Mutex
 	tasks  []*Task
 	C      chan struct{}
 	Active bool
@@ -28,7 +28,17 @@ func NewService() *Service {
 }
 
 // stop activated service
+func (m *Service) Clean() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.tasks = []*Task{}
+}
+
+// stop activated service
 func (m *Service) Stop() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	if m.Active {
 		for _, t := range m.tasks {
 			t.stop()
@@ -44,6 +54,7 @@ func (m *Service) StartWait() {
 	m.C = make(chan struct{})
 
 	var wg sync.WaitGroup
+	m.mutex.Lock()
 	wg.Add(len(m.tasks))
 	for _, t := range m.tasks {
 		go func(t *Task) {
@@ -51,11 +62,14 @@ func (m *Service) StartWait() {
 			wg.Done()
 		}(t)
 	}
+	m.mutex.Unlock()
 	wg.Wait()
 }
 
 // Create a new Task with the given duration and Handlers
 func (m *Service) NewTask(d Duration, handlers ...Handlers) (*Task, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	var c = &Task{}
 
@@ -80,7 +94,6 @@ func (m *Service) NewTask(d Duration, handlers ...Handlers) (*Task, error) {
 			now := time.Now()
 			ttt, _ := gronx.NextTick(*d.crontab, true)
 			dur := ttt.Sub(now)
-			fmt.Println("dur : ", dur)
 			return dur
 		}
 	} else if d.duration != nil {
