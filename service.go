@@ -16,15 +16,26 @@ import (
 */
 
 type Service struct {
-	mutex  sync.Mutex
-	tasks  []*Task
-	C      chan struct{}
-	Active bool
+	mutex   sync.Mutex
+	tasks   []*Task
+	context context.Context
+	cancel  context.CancelFunc
+	C       chan struct{}
+	Active  bool
 }
 
 // create a new Service
 func NewService() *Service {
 	return &Service{}
+}
+
+func (m *Service) resetContext() {
+	if m.context != nil && m.context.Err() == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.context = ctx
+	m.cancel = cancel
 }
 
 // stop activated service
@@ -40,8 +51,8 @@ func (m *Service) Stop() {
 	defer m.mutex.Unlock()
 
 	if m.Active {
-		for _, t := range m.tasks {
-			t.stop()
+		if m.cancel != nil {
+			m.cancel()
 		}
 		close(m.C)
 		m.Active = false
@@ -49,29 +60,44 @@ func (m *Service) Stop() {
 }
 
 // Start the Task without blocking-io
-func (m *Service) StartWait() {
+func (m *Service) StartTasksAwait() {
+	m.resetContext()
 	m.Active = true
 	m.C = make(chan struct{})
 
 	var wg sync.WaitGroup
-	m.mutex.Lock()
+	// m.mutex.Lock()
 	wg.Add(len(m.tasks))
 	for _, t := range m.tasks {
-		go func(t *Task) {
-			t.start()
+		f := func(t *Task) {
+			t.start(m.context)
 			wg.Done()
-		}(t)
+		}
+		if t.aWait {
+			f(t)
+		} else {
+			go f(t)
+		}
 	}
-	m.mutex.Unlock()
+	// m.mutex.Unlock()
 	wg.Wait()
 }
+func (m *Service) NewTask(d Duration, handlers ...Handlers) (*Task, error) {
+	return m.newTask(d, false, handlers...)
+}
+
+// func (m *Service) NewTaskAwait(d Duration, handlers ...Handlers) (*Task, error) {
+// 	return m.newTask(d, true, handlers...)
+// }
 
 // Create a new Task with the given duration and Handlers
-func (m *Service) NewTask(d Duration, handlers ...Handlers) (*Task, error) {
+func (m *Service) newTask(d Duration, aWait bool, handlers ...Handlers) (*Task, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	var c = &Task{}
+	var c = &Task{
+		aWait: aWait,
+	}
 
 	for _, h := range handlers {
 		if h.runner != nil {
@@ -105,12 +131,50 @@ func (m *Service) NewTask(d Duration, handlers ...Handlers) (*Task, error) {
 	return c, nil
 }
 
+// run f function in once, if f out the error then retry to run f again.
+// func (m *Service) RetryAwait(f func(context.Context) error, retryDelayDuration time.Duration) error {
+// 	m.mutex.Lock()
+// 	defer m.mutex.Unlock()
+// 	m.resetContext()
+
+// 	timer := time.NewTimer(retryDelayDuration)
+// 	for {
+// 		timer.Reset(retryDelayDuration)
+// 		select {
+// 		case <-m.context.Done():
+// 			return m.context.Err()
+// 		case <-timer.C:
+// 			if err := f(m.context); err != nil {
+// 				continue
+// 			}
+// 			return nil
+// 		}
+// 	}
+// }
+
 // ========================= Options:
 
 type Duration struct {
 	duration *time.Duration
 	crontab  *string
 }
+
+type RunType int
+
+const (
+	RunContinuousAsync RunType = 0
+	RunOnceSync        RunType = 1
+)
+
+type RunnerType struct {
+	runnerType RunType
+}
+
+func WithRunType(t RunType) RunnerType {
+	return RunnerType{runnerType: t}
+}
+
+type RunnerHandler func(ctx context.Context) error
 
 func WithCrontab(c string) Duration {
 	return Duration{crontab: &c}
@@ -120,12 +184,12 @@ func WithDuration(d time.Duration) Duration {
 }
 
 type Handlers struct {
-	runner      func(context.Context)
+	runner      RunnerHandler
 	onStart     func()
 	onTerminate func()
 }
 
-func Runner(f func(ctx context.Context)) Handlers {
+func Runner(f RunnerHandler) Handlers {
 	return Handlers{runner: f}
 }
 func OnStart(f func()) Handlers {

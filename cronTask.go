@@ -8,21 +8,21 @@ import (
 type Task struct {
 	calculateDuration func() time.Duration
 	onStart           func()
-	runner            func(context.Context)
+	runner            RunnerHandler
 	onTerminate       func()
-	cancel            context.CancelFunc
 	active            bool
+	aWait             bool
 }
 
 // Stop the running Task
-func (t *Task) stop() {
-	if t.active {
-		t.cancel()
-	}
-}
+// func (t *Task) stop() {
+// 	if t.active {
+// 		t.cancel()
+// 	}
+// }
 
 // Start the Task with blocking-io
-func (t *Task) start() {
+func (t *Task) start(ctx context.Context) {
 	if t.active {
 		panic("you want run a runned task")
 	}
@@ -31,9 +31,6 @@ func (t *Task) start() {
 	defer func() {
 		t.active = false
 	}()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.cancel = cancel
 
 	if t.onStart != nil {
 		t.onStart()
@@ -52,7 +49,11 @@ func (t *Task) start() {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			t.runner(ctx)
+			err := t.runner(ctx)
+			if err == nil && t.aWait {
+				return
+			}
+
 		}
 
 	}
