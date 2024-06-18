@@ -92,7 +92,7 @@ func (m *Service) NewTask(d Duration, handlers ...Handlers) (*Task, error) {
 
 		c.calculateDuration = func() time.Duration {
 			now := time.Now()
-			ttt, _ := gronx.NextTick(*d.crontab, true)
+			ttt, _ := gronx.NextTick(*d.crontab, false)
 			dur := ttt.Sub(now)
 			return dur
 		}
