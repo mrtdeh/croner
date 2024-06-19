@@ -91,13 +91,16 @@ func parseOptions(opts []Options) (opt Options) {
 		if o.duration != nil {
 			opt.duration = o.duration
 		}
-		if o.runner == nil {
-			panic("must provide a runner")
+		if o.runner != nil {
+			opt.runner = o.runner
 		}
-		opt.runner = o.runner
+
 		if o.runnerType > 0 {
 			opt.runnerType = o.runnerType
 		}
+	}
+	if opt.runner == nil {
+		panic("must provide a runner")
 	}
 	return opt
 }
