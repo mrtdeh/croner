@@ -82,82 +82,57 @@ func (m *Service) StartTasksAwait() {
 	// m.mutex.Unlock()
 	wg.Wait()
 }
-func (m *Service) NewTask(d Duration, handlers ...Handlers) (*Task, error) {
-	return m.newTask(d, false, handlers...)
+
+func parseOptions(opts []Options) (opt Options) {
+	for _, o := range opts {
+		if o.crontab != nil {
+			opt.crontab = o.crontab
+		}
+		if o.duration != nil {
+			opt.duration = o.duration
+		}
+		if o.runner == nil {
+			panic("must provide a runner")
+		}
+		opt.runner = o.runner
+		if o.runnerType > 0 {
+			opt.runnerType = o.runnerType
+		}
+	}
+	return opt
 }
 
-// func (m *Service) NewTaskAwait(d Duration, handlers ...Handlers) (*Task, error) {
-// 	return m.newTask(d, true, handlers...)
-// }
-
 // Create a new Task with the given duration and Handlers
-func (m *Service) newTask(d Duration, aWait bool, handlers ...Handlers) (*Task, error) {
+func (m *Service) NewTask(opts ...Options) (*Task, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	var c = &Task{
-		aWait: aWait,
-	}
+	opt := parseOptions(opts)
 
-	for _, h := range handlers {
-		if h.runner != nil {
-			c.runner = h.runner
-		}
-		if h.onStart != nil {
-			c.onStart = h.onStart
-		}
-		if h.onTerminate != nil {
-			c.onTerminate = h.onTerminate
-		}
+	var c = &Task{}
+	if opt.runnerType == RunOnceSync {
+		c.aWait = true
 	}
-	if c.runner == nil {
-		panic("runner is nil")
-	}
+	c.runner = opt.runner
 
-	if d.crontab != nil {
+	if opt.crontab != nil {
 
 		c.calculateDuration = func() time.Duration {
 			now := time.Now()
-			ttt, _ := gronx.NextTick(*d.crontab, false)
+			ttt, _ := gronx.NextTick(*opt.crontab, false)
 			dur := ttt.Sub(now)
 			return dur
 		}
-	} else if d.duration != nil {
+	} else if opt.duration != nil {
 		c.calculateDuration = func() time.Duration {
-			return *d.duration
+			return *opt.duration
 		}
 	}
 	m.tasks = append(m.tasks, c)
 	return c, nil
 }
 
-// run f function in once, if f out the error then retry to run f again.
-// func (m *Service) RetryAwait(f func(context.Context) error, retryDelayDuration time.Duration) error {
-// 	m.mutex.Lock()
-// 	defer m.mutex.Unlock()
-// 	m.resetContext()
-
-// 	timer := time.NewTimer(retryDelayDuration)
-// 	for {
-// 		timer.Reset(retryDelayDuration)
-// 		select {
-// 		case <-m.context.Done():
-// 			return m.context.Err()
-// 		case <-timer.C:
-// 			if err := f(m.context); err != nil {
-// 				continue
-// 			}
-// 			return nil
-// 		}
-// 	}
-// }
-
 // ========================= Options:
-
-type Duration struct {
-	duration *time.Duration
-	crontab  *string
-}
 
 type RunType int
 
@@ -166,35 +141,26 @@ const (
 	RunOnceSync        RunType = 1
 )
 
-type RunnerType struct {
+type Options struct {
+	duration   *time.Duration
+	crontab    *string
 	runnerType RunType
+	runner     RunnerHandler
 }
 
-func WithRunType(t RunType) RunnerType {
-	return RunnerType{runnerType: t}
+func WithRunType(t RunType) Options {
+	return Options{runnerType: t}
 }
 
 type RunnerHandler func(ctx context.Context) error
 
-func WithCrontab(c string) Duration {
-	return Duration{crontab: &c}
+func WithCrontab(c string) Options {
+	return Options{crontab: &c}
 }
-func WithDuration(d time.Duration) Duration {
-	return Duration{duration: &d}
-}
-
-type Handlers struct {
-	runner      RunnerHandler
-	onStart     func()
-	onTerminate func()
+func WithDuration(d time.Duration) Options {
+	return Options{duration: &d}
 }
 
-func Runner(f RunnerHandler) Handlers {
-	return Handlers{runner: f}
-}
-func OnStart(f func()) Handlers {
-	return Handlers{onStart: f}
-}
-func OnTerminate(f func()) Handlers {
-	return Handlers{onTerminate: f}
+func WithRunner(f RunnerHandler) Options {
+	return Options{runner: f}
 }
