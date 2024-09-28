@@ -91,6 +91,10 @@ func parseOptions(opts []Options) (opt Options) {
 		if o.duration != nil {
 			opt.duration = o.duration
 		}
+		if o.dayTime != nil {
+			opt.dayTime = o.dayTime
+		}
+
 		if o.runner != nil {
 			opt.runner = o.runner
 		}
@@ -130,7 +134,16 @@ func (m *Service) NewTask(opts ...Options) (*Task, error) {
 		c.calculateDuration = func() time.Duration {
 			return *opt.duration
 		}
+	} else if opt.dayTime != nil {
+		c.calculateDuration = func() time.Duration {
+			d := time.Duration(opt.dayTime.Day) * time.Hour * 24
+			h := time.Duration(opt.dayTime.Hour) * time.Hour
+			m := time.Duration(opt.dayTime.Minute) * time.Minute
+			s := time.Duration(opt.dayTime.Seconds) * time.Second
+			return d + h + m + s
+		}
 	}
+
 	m.tasks = append(m.tasks, c)
 	return c, nil
 }
@@ -144,9 +157,17 @@ const (
 	RunOnceSync        RunType = 1
 )
 
+type DayTime struct {
+	Day     uint
+	Hour    uint
+	Minute  uint
+	Seconds uint
+}
+
 type Options struct {
 	duration   *time.Duration
 	crontab    *string
+	dayTime    *DayTime
 	runnerType RunType
 	runner     RunnerHandler
 }
@@ -162,6 +183,16 @@ func WithCrontab(c string) Options {
 }
 func WithDuration(d time.Duration) Options {
 	return Options{duration: &d}
+}
+
+func WithDayTime(day, hour, minute, seconds uint) Options {
+	daytime := DayTime{
+		Day:     day,
+		Hour:    hour,
+		Minute:  minute,
+		Seconds: seconds,
+	}
+	return Options{dayTime: &daytime}
 }
 
 func WithRunner(f RunnerHandler) Options {
