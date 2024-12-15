@@ -59,6 +59,11 @@ func (m *Service) Stop() {
 	}
 }
 
+func (m *Service) Context() context.Context {
+
+	return m.context
+}
+
 // Start the Task without blocking-io
 func (m *Service) StartTasksAwait() {
 	m.resetContext()
